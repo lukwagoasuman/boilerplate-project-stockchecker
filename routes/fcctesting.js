@@ -27,76 +27,95 @@
 
 'use strict';
 
-var cors = require('cors');
-var fs = require('fs');
-var runner = require('../test-runner');
+const cors = require('cors');
+const fs = require('fs').promises;
+const runner = require('../test-runner');
 
-module.exports = function (app) {
-
+module.exports = (app) => {
+  // Serve the content of server.js
   app.route('/_api/server.js')
-    .get(function(req, res, next) {
+    .get(async (req, res, next) => {
       console.log('requested');
-      fs.readFile(__dirname + '/server.js', function(err, data) {
-        if(err) return next(err);
-        res.send(data.toString());
-      });
-    });
-  app.route('/_api/routes/api.js')
-    .get(function(req, res, next) {
-      console.log('requested');
-      fs.readFile(__dirname + '/routes/api.js', function(err, data) {
-        if(err) return next(err);
-        res.type('txt').send(data.toString());
-      });
-    });
-  app.route('/_api/controllers/convertHandler.js')
-    .get(function(req, res, next) {
-      console.log('requested');
-      fs.readFile(__dirname + '/controllers/convertHandler.js', function(err, data) {
-        if(err) return next(err);
-        res.type('txt').send(data.toString());
-      });
+      try {
+        const data = await fs.readFile(__dirname + '/server.js', 'utf8');
+        res.send(data);
+      } catch (err) {
+        next(err);
+      }
     });
 
-  app.get('/_api/get-tests', cors(), function(req, res, next){
+  // Serve the content of api.js
+  app.route('/_api/routes/api.js')
+    .get(async (req, res, next) => {
+      console.log('requested');
+      try {
+        const data = await fs.readFile(__dirname + '/routes/api.js', 'utf8');
+        res.type('txt').send(data);
+      } catch (err) {
+        next(err);
+      }
+    });
+
+  // Serve the content of convertHandler.js
+  app.route('/_api/controllers/convertHandler.js')
+    .get(async (req, res, next) => {
+      console.log('requested');
+      try {
+        const data = await fs.readFile(__dirname + '/controllers/convertHandler.js', 'utf8');
+        res.type('txt').send(data);
+      } catch (err) {
+        next(err);
+      }
+    });
+
+  // Get tests
+  app.get('/_api/get-tests', cors(), (req, res, next) => {
     console.log('requested');
-    if(process.env.NODE_ENV === 'test') return next();
-    res.json({status: 'unavailable'});
-  },
-  function(req, res, next){
-    if(!runner.report) return next();
+    if (process.env.NODE_ENV === 'test') return next();
+    res.json({ status: 'unavailable' });
+  }, (req, res, next) => {
+    if (!runner.report) return next();
     res.json(testFilter(runner.report, req.query.type, req.query.n));
-  },
-  function(req, res){
-    runner.on('done', function(report){
-      process.nextTick(() =>  res.json(testFilter(runner.report, req.query.type, req.query.n)));
+  }, (req, res) => {
+    runner.on('done', (report) => {
+      process.nextTick(() => res.json(testFilter(runner.report, req.query.type, req.query.n)));
     });
   });
-  app.get('/_api/app-info', function(req, res) {
-    var hs = Object.keys(res._headers)
-      .filter(h => !h.match(/^access-control-\w+/));
-    var hObj = {};
-    hs.forEach(h => {hObj[h] = res._headers[h]});
-    delete res._headers['strict-transport-security'];
-    res.json({headers: hObj});
+
+  // Get application info
+  app.get('/_api/app-info', (req, res) => {
+    const headers = Object.keys(res.getHeaders())
+      .filter(h => !h.match(/^access-control-\w+/))
+      .reduce((obj, h) => {
+        obj[h] = res.getHeader(h);
+        return obj;
+      }, {});
+
+    // Remove 'strict-transport-security' header
+    delete headers['strict-transport-security'];
+
+    res.json({ headers });
   });
-  
 };
 
+// Filter tests based on type and optional index
 function testFilter(tests, type, n) {
-  var out;
+  let filteredTests;
+
   switch (type) {
-    case 'unit' :
-      out = tests.filter(t => t.context.match('Unit Tests'));
+    case 'unit':
+      filteredTests = tests.filter(t => t.context.includes('Unit Tests'));
       break;
     case 'functional':
-      out = tests.filter(t => t.context.match('Functional Tests') && !t.title.match('#example'));
+      filteredTests = tests.filter(t => t.context.includes('Functional Tests') && !t.title.includes('#example'));
       break;
     default:
-      out = tests;
+      filteredTests = tests;
   }
-  if(n !== undefined) {
-    return out[n] || out;
+
+  if (n !== undefined) {
+    return filteredTests[n] || filteredTests;
   }
-  return out;
+
+  return filteredTests;
 }
