@@ -1,13 +1,6 @@
 'use strict';
 
 require('dotenv').config();
-const express     = require('express');
-const bodyParser  = require('body-parser');
-const cors        = require('cors');
-
-const apiRoutes         = require('./routes/api.js');
-const fccTestingRoutes  = require('./routes/fcctesting.js');
-const runner            = require('./test-runner');
 
 const app = express();
 
@@ -52,5 +45,3 @@ const listener = app.listen(process.env.PORT || 3000, function () {
     }, 3500);
   }
 });
-
-module.exports = app; //for testing
